@@ -1,0 +1,147 @@
+---
+title: "MT_Data4"
+output: html_document
+---
+
+```{r}
+ts = as.numeric(read.csv("q4train.csv", as.is = TRUE)[,2])
+plot(ts, type = 'l')
+
+ts.log = log(ts)
+plot(ts.log, type ="l")
+ts.log.d = diff(ts.log)
+plot(ts.log.d, type = 'l')
+
+acf(ts.log.d, lag.max = 100)
+# 52 is a large peak, 48 spike is larger
+# Like a MA(1) or MA(4)
+pacf(ts.log.d, lag.max = 100)
+
+
+ts.log.dd = diff(ts.log.d, 52)
+plot(ts.log.dd, type = 'l')
+acf(ts.log.dd, lag.max = 158)$acf
+# Large peak at lag 1, a smaller peak at lag 52, MA(1) or with seasonal MA(1)
+pacf(ts.log.dd, lag.max = 110)
+# Seasonal AR, AR(3)
+
+m3101 = arima(ts.log, order = c(3, 1, 1), seasonal = list(order = c(0, 1, 1), period = 52))
+tsdiag(m3101)
+AIC(m3101)    #-1402.89
+
+m2101 = arima(ts.log, order = c(2, 1, 1), seasonal = list(order = c(0, 1, 1), period = 52))
+tsdiag(m2101)
+AIC(m2101)    #-1405.392
+
+m3111 = arima(ts.log, order = c(3, 1, 1), seasonal = list(order = c(1, 1, 1), period = 52))
+tsdiag(m3111)
+AIC(m3111)   #-1401.488
+
+m3112 = arima(ts.log, order = c(3, 1, 1), seasonal = list(order = c(1, 1, 2), period = 52))
+tsdiag(m3112)
+AIC(m3112) #-1399.796
+
+m2111 = arima(ts.log, order = c(2, 1, 1), seasonal = list(order = c(1, 1, 1), period = 52))
+tsdiag(m2111)
+AIC(m2111) # -1404.084
+
+m2112 = arima(ts.log, order = c(2, 1, 1), seasonal = list(order = c(1, 1, 2), period = 52))
+# Error
+
+m1111 = arima(ts.log, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 1), period = 52))
+# Error
+
+m1112 = arima(ts.log, order = c(1, 1, 1), seasonal = list(order = c(1, 1, 2), period = 52))
+# Error
+
+m0101 = arima(ts.log, order = c(0, 1, 1), seasonal = list(order = c(0, 1, 1), period = 52))
+AIC(m0101)
+tsdiag(m0101)
+
+m1101 = arima(ts.log, order = c(1, 1, 1), seasonal = list(order = c(0, 1, 1), period = 52))
+AIC(m1101) # -1407.277
+tsdiag(m1101)
+
+```
+
+
+Cross Validation
+```{r}
+len <- length(ts.log)
+# we have a period of 52 so let's try to predict entire periods:
+
+computeCVmse <- function(order.totry, seasorder.totry){
+  MSE <- numeric()
+  for(k in 5:1){
+    train.dt <-ts.log[1:(len - 52 * k)]
+    test.dt <- ts.log[(len - 52 * k + 1):(len - 52 * (k - 1))]
+    mod <- arima(train.dt, order = order.totry, seasonal = 
+                   list(order = seasorder.totry, period = 52), method = "CSS")
+    fcast <- predict(mod, n.ahead = 52)
+    MSE[k] <- mean((exp(fcast$pred) - exp(test.dt))^2)
+  }
+  return(MSE)
+}
+
+MSE3101 = computeCVmse(c(3, 1, 1), c(0,1,1))
+MSE2101 = computeCVmse(c(2, 1, 1), c(0,1,1))
+MSE3111 = computeCVmse(c(3, 1, 1), c(1,1,1))
+MSE3112 = computeCVmse(c(3, 1, 1), c(1,1,2))
+MSE2111 = computeCVmse(c(2, 1, 1), c(1,1,1))
+MSE2112 = computeCVmse(c(2, 1, 1), c(1,1,2))
+MSE1111 = computeCVmse(c(1, 1, 1), c(1,1,1))
+MSE1112 = computeCVmse(c(1, 1, 1), c(1,1,2))
+MSE1121 = computeCVmse(c(1, 1, 1), c(2,1,1))
+MSE1101 = computeCVmse(c(1, 1, 1), c(0,1,1))
+MSE1102 = computeCVmse(c(1, 1, 1), c(0,1,2))
+MSE1201 = computeCVmse(c(1, 1, 2), c(0,1,1))
+MSE0101 = computeCVmse(c(0, 1, 1), c(0,1,1))
+
+MSE3101 
+# 48.321611 29.462174  7.936428  9.343114 11.433418
+MSE2101
+# 47.098052 30.639286  8.365653  9.268876 11.494813
+MSE3111 
+# 48.177622 30.549521  7.894156  9.330762 12.284385
+MSE3112
+# 48.174077 30.613445  7.883054  9.678646 21.076463
+MSE2111 
+# 48.495996 30.074450  7.859315  9.663337 11.747275
+MSE2112 
+# 48.641351 30.204707  7.840029 10.069648 20.552462
+MSE1111
+# 42.405070 31.968461  8.391786 10.186023 11.529298
+MSE1112 
+# 42.453116 32.143098  8.351001 10.312267 18.713868
+MSE1121
+# 40.055110 30.607209  9.685140  9.961085 17.703409
+MSE1101
+# 42.240579 31.420035  8.501979  9.814225 11.329723
+MSE1102
+# 41.967970 32.348763  8.267529 10.637154 19.769704
+MSE1201
+# 46.878945 31.154393  8.474460  9.528338 11.340364
+MSE0101
+# 41.944615 31.320226  8.517714 10.491552 11.280750
+```
+
+```{r}
+predictions = exp(predict(m0101, n.ahead = 104)$pred)
+
+## Check: Does that make sense?
+plot(1:(length(ts) + length(predictions)), c(ts, predictions), type = 'l', col = 1)
+points((length(ts) + 1) : (length(ts) + length(predictions)), predictions, type = 'l', col = 2)
+
+## Let's crete the file:
+write.table(predictions,
+            sep = ",",
+            col.names = FALSE,
+            row.names = FALSE,
+            file = "Q4_Zhichao_Yang_25779475.txt")
+            # file = "Exercise0_Firstname_Lastname_StudentIDNumber.txt")
+
+# A quick check, that the file is what we expect it to be:
+read.table("Q4_Zhichao_Yang_25779475.txt", sep = ",")
+plot(as.numeric(unlist(read.table("Q4_Zhichao_Yang_25779475.txt", sep = ","))))
+
+```
